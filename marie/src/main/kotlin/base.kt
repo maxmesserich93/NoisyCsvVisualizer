@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.internal.AtomicOp
 import kotlinx.coroutines.withContext
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVPrinter
@@ -62,11 +63,6 @@ suspend fun <T> prepareDataFromCsvFolder(
     .asSequence()
     .asFlow()
     .map { it.toConvertedCsv(dataMapper) }
-    .map { it ->
-      //TODO: Write error file
-      //TODO: Write csv file with extracted values
-      it
-    }
 }
 
 private fun findCsvFilesInFolder(path: Path) = Files.walk(path)
@@ -76,7 +72,7 @@ private fun findCsvFilesInFolder(path: Path) = Files.walk(path)
 
 private suspend fun <T> Path.toConvertedCsv(
   dataMapper: KSuspendFunction1<Row, Either<RowError, T>>
-): ConvertedCsv<T> = withContext(Dispatchers.IO) {
+): ConvertedCsv<T> = withContext(Dispatchers.Default) {
   val left = mutableListOf<String>()
   val right = mutableListOf<T>()
 
@@ -91,7 +87,7 @@ private suspend fun <T> Path.toConvertedCsv(
       right::add
     )
   }
-  memoizedPrinter.value?.also { println("============ Closing ${it.fileName}.") }?.let(Printer::printer)?.let(CSVPrinter::close)
+  memoizedPrinter.value?.let(Printer::printer)?.let(CSVPrinter::close)
   ConvertedCsv(fileName.toString(), right, left)
 }
 
@@ -154,9 +150,9 @@ data class Printer(val fileName: String, val printer: CSVPrinter)
        reference.updateAndGet { fn() }!!
      }else -> reference.get()!!;
    }
-
-
  }
+
+
 
 
 
