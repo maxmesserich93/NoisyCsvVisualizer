@@ -16,6 +16,7 @@ import java.io.File
 import java.io.FileReader
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KSuspendFunction1
@@ -96,7 +97,7 @@ private fun <T> memoizedCsvPrinterForType(
   path: Path,
   fields: List<KProperty1<T, Any>>
 ): Memoized<Printer> = with(
-  Path.of(System.getProperty("user.dir"), "errors", "${path.fileName}-errors.csv")){
+  Paths.get(System.getProperty("user.dir"), "errors", "${path.fileName}-errors.csv")){
   {
     println("Found errors in file. ${path.fileName}. Creating error csv: $this" )
     Printer(
@@ -143,7 +144,7 @@ data class Printer(val fileName: String, val printer: CSVPrinter)
    }
 
    val value : T?
-     get() = reference.acquire
+     get() = this.reference.get()
 
    override fun invoke(): T = when {
      reference.get() == null -> {

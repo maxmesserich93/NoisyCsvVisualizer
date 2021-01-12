@@ -99,7 +99,7 @@ suspend fun main() {
 
 private fun PlotAndData.saveGraphAndData(){
   ggsave(plot, filename = "$name.png", path = dir)
-  createCsvFile(keys, data, Path.of(dir, "$name.csv"))
+  createCsvFile(keys, data, Paths.get(dir, "$name.csv"))
 }
 
 private fun createCsvFile(headers: List<String>, data: List<List<Comparable<*>>>, csvFile: Path) {
