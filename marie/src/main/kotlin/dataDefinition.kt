@@ -10,7 +10,9 @@ data class RohDaten(
   val start: LocalTime,
   val end: LocalTime,
   val sensor: Sensor,
-  val frequencyRange: FrequencyClassification
+  val frequencyRange: FrequencyClassification,
+  val temperature: Double,
+  val humidity: Double
 )
 
 fun String.classifySensor() = when (this) {
@@ -66,18 +68,14 @@ fun parseDate(entry: String): LocalDateTime = if (entry.contains("T")) {
   LocalDateTime.parse(entry, DateTimeFormatter.ofPattern(pattern))
 }
 
-suspend fun mapToData(input: Row): Either<RowError, RohDaten> {
-
-
-    val a = input
-
-  return runBlocking { either {
+suspend fun mapToData(input: Row): Either<RowError, RohDaten> = either {
     RohDaten(
       start = !input.tryParse("begin_datetime_utc", ::parseDate).map { it.toLocalTime() },
       end = !input.tryParse("end_datetime_utc", ::parseDate).map { it.toLocalTime() },
       sensor = !input.tryParse("adc_ch", String::classifySensor),
-      frequencyRange = !input.tryParse("frequency_range", String::classifyFrequency)
+      frequencyRange = !input.tryParse("frequency_range", String::classifyFrequency),
+      temperature = !input.tryParse("temp_in", String::toDouble),
+      humidity = !input.tryParse("humidity_in", String::toDouble)
     )
   }
-  }
-}
+
