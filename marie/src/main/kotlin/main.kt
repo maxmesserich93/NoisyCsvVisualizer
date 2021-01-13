@@ -24,6 +24,7 @@ data class PlotAndData(
   val data: List<List<Comparable<*>>>
   )
 
+val SEPERATOR = ','
 suspend fun main() {
 
   prepareDataFromCsvFolder(

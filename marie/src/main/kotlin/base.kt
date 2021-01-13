@@ -108,6 +108,7 @@ private fun <T> memoizedCsvPrinterForType(
 
 private suspend fun <T> Path.readFile(dataMapper: KSuspendFunction1<Row, Either<RowError, T>>): Flow<Either<RowError, T>> =
   CSVFormat.DEFAULT
+    .withDelimiter(SEPERATOR)
     .withFirstRecordAsHeader()
     .parse(FileReader(toFile()))
     .asFlow()
