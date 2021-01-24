@@ -1,184 +1,286 @@
-import jetbrains.letsPlot.export.ggsave
-import jetbrains.letsPlot.geom.geom_line
-import jetbrains.letsPlot.ggsize
-import jetbrains.letsPlot.intern.Feature
-import jetbrains.letsPlot.intern.Plot
-import jetbrains.letsPlot.lets_plot
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flatMapMerge
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.transform
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.nio.file.Path
+import FrequencyClassification.FAECHELN
+import FrequencyClassification.SCHWIRREN
+import FrequencyClassification.STOPP_SIGNAL
+import FrequencyClassification.TANZEN
+import FrequencyClassification.WHOOPING
+import Sensor.ADC0
+import Sensor.ADC1
+import Sensor.ADC2
+import Sensor.ADC3
+import Sensor.ADC4
+import Sensor.ADC5
+import arrow.core.computations.either
+import org.knowm.xchart.XYChart
+import org.knowm.xchart.XYChartBuilder
+import java.awt.Color
 import java.nio.file.Paths
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
-data class PlotAndData(
-  val dir: String,
-  val name: String,
-  val plot: Plot,
-  val keys: List<String>,
-  val data: List<List<Comparable<*>>>
-  )
 
-val SEPERATOR = ','
+data class RohDaten(
+  val start: LocalTime,
+  val end: LocalTime,
+  val sensor: Sensor,
+  val frequencyRange: FrequencyClassification,
+  val temperature: Double,
+  val humidity: Double
+)
+
+enum class FrequencyClassification {
+  TANZEN,
+  SCHWIRREN,
+  STOPP_SIGNAL,
+  WHOOPING,
+  FAECHELN
+}
+
+enum class Sensor {
+  ADC0,
+  ADC1,
+  ADC2,
+  ADC3,
+  ADC4,
+  ADC5
+}
+
+
+fun String.classifySensor() = when (this) {
+  "adc0" -> ADC0
+  "adc1" -> ADC1
+  "adc2" -> ADC2
+  "adc3" -> ADC3
+  "adc4" -> ADC4
+  "adc5" -> ADC5
+  else -> throw IllegalArgumentException("UNKNOWN SENSOR: $this")
+}
+
+fun String.classifyFrequency(): FrequencyClassification = when (this) {
+  "[5, 30]" -> TANZEN
+  "[190, 230]" -> SCHWIRREN
+  "[380, 400]" -> STOPP_SIGNAL
+  "[250, 370]" -> WHOOPING
+  "[90, 120]" -> FAECHELN
+  else -> throw IllegalArgumentException("$this is not a valid frequency")
+}
+
+
+val SENSOR_COLORS = mapOf(
+  ADC0 to Color.BLUE,
+  ADC1 to Color.BLACK,
+  ADC2 to Color.RED,
+  ADC3 to Color.YELLOW,
+  ADC4 to Color.GREEN,
+  ADC5 to Color.CYAN
+)
+
+val FREQUENCY_COLORS = mapOf(
+  TANZEN to Color.BLUE,
+  SCHWIRREN to Color.BLACK,
+  STOPP_SIGNAL to Color.RED,
+  WHOOPING to Color.YELLOW,
+  FAECHELN to Color.GREEN
+)
+
+//HASS
+fun parseDate(entry: String): LocalDateTime = if (entry.contains("T")) {
+  LocalDateTime.parse(entry, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+} else {
+  val suffixlen = entry.length - entry.indexOfLast { it == '.' }
+  val pattern = "yyyy-MM-dd HH:mm:ss.${(2..suffixlen).joinToString(separator = "") { "S" }}"
+  LocalDateTime.parse(entry, DateTimeFormatter.ofPattern(pattern))
+}
+
+
 suspend fun main() {
+  System.setProperty("org.graphstream.ui", "swing");
+  //SYSTEM.renderer.display()
+  produceGraphs(
+    sourceCSVFolder = Paths.get(".", "example"),
+    outputFolder = Paths.get(".", "graphs"),
+    csvSeparator = ',',
+    //Convert csv row to your data type
+    dataParser = { row ->
+      either {
+        RohDaten(
+          //Do not question the addition of 2 hours!
+          start = !row
+            .tryParse("begin_datetime_utc", ::parseDate)
+            .map { it.toLocalTime().plusHours(2) },
+          end = !row.tryParse("end_datetime_utc", ::parseDate)
+            .map { it.toLocalTime().plusHours(2) },
+          sensor = !row.tryParse("adc_ch", String::classifySensor),
+          frequencyRange = !row.tryParse("frequency_range", String::classifyFrequency),
+          temperature = !row.tryParse("temp_in", String::toDouble),
+          humidity = !row.tryParse("humidity_in", String::toDouble)
+        )
+      }
+    },
+    //Remove all entries for Sensor ADC5 because science.
+    filter = { true },
+    //Define a list of functions producing n graphs. All CSV files from the source folder are applied to these functions
+    graphCreationFunctions = listOf(
+      { (data: List<RohDaten>, _, meta) ->
+        data
+          .groupBy { it.frequencyRange }
+          .mapValues { (_, rawData) -> rawData.sumOccurenceInEachHour() }
+          .map { (frequency, data: Map<Int, Int>) ->
+            val chart = createDefaultChart("asd")
+            chart.plotSeries(frequency, data) { FREQUENCY_COLORS.getValue(frequency) }
 
-  prepareDataFromCsvFolder(
-    path = Paths.get(".", "data"),
-    dataMapper = ::mapToData
-  )
-    .map {
-      println("${it.fileName}: ${it.data.size}")
-      it
-    }
-    .filter { it.data.isNotEmpty() }
-    .buffer()
-    .transform { convertedCsv ->
-      val datePrefix = convertedCsv.fileName.take(4)
-      val groupedByFrequency: Map<FrequencyClassification, List<RohDaten>> =
-        convertedCsv.data.groupBy { it.frequencyRange }
-
-      val dir = "graphs/$datePrefix"
-      File(System.getProperty("user.dir"), dir).mkdirs()
-
-      //TODO: FIX BESCHRIFTUNG
-      val summiert = {
-        groupedByFrequency
-          .mapValues { (frequencyClassification, rawData) -> rawData.sumOccurenceInEachHour() }
-          .map { (frequencyClassification, data) ->
-            val x_axis = "Uhrzeit" to { data.keys.toList() }
-            val y_axis = "${frequencyClassification.name} Signal/Stunde" to { data.values.toList() }
-
-            val colorMapping = "Messsonde" to { List(data.size) { frequencyClassification.name } }
-
-            val graphData = calculateGraphData(x_axis, y_axis, colorMapping = colorMapping)
             PlotAndData(
-              dir,
-              "$frequencyClassification-summiert",
-              plot = graphData.createGraph(geomLine(x_axis, y_axis, colorMapping)) + ggsize(
-                500,
-                250
-              ),
-              graphData.keys.toList(),
-              graphData.map { it.value }.rotate()
+              dir = meta.targetDir(),
+              name = "${frequency}-summiert",
+              plot = chart,
+              csvHeaders = listOf("Uhrzeit", "Signal/Stunde"),
+              csvRows = data.map { (hour, occurence) -> listOf(hour, occurence) }
             )
           }
-      }
+      },
 
-      val getrennt = {
-        groupedByFrequency
+      { (data: List<RohDaten>, _, meta) ->
+        data
+          .groupBy { it.frequencyRange }
           .mapValues { (_, rawData) -> rawData.groupBySensorAndSumOccurenceInEachHour() }
           .map { (frequencyClassification, data) ->
+            val chart = createDefaultChart("asd")
 
-            val x_axis = "Uhrzeit" to { data.values.flatMap { it.keys } }
-            val y_axis = "${frequencyClassification.name}  Signale/Stunde" to { data.values.flatMap { it.values } }
-            val sensorPerGraph = { data.flatMap { (sensor, d) -> List(d.size) { sensor.name } } }
-            val colorMapping = "Messsonde" to sensorPerGraph
+            data.forEach { (sensor, data) ->
+              chart.plotSeries(sensor, data) { SENSOR_COLORS.getValue(sensor) }
+            }
 
-            val graphData = calculateGraphData(
-              x_axis,
-              y_axis,
-              colorMapping
-            )
             PlotAndData(
-              dir,
-              "$frequencyClassification-getrennt",
-              graphData.createGraph(geomLine(x_axis, y_axis, colorMapping = colorMapping)) + ggsize(
-                500,
-                250
-              ),
-              graphData.keys.toList(),
-              graphData.map { it.value }.rotate()
+              dir = meta.targetDir(),
+              name = "$frequencyClassification-getrennt",
+              plot = chart,
+              csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Messsonde"),
+              csvRows = data.flatMap { (sensor, data) ->
+                data.map {
+                  listOf(
+                    it.key,
+                    it.value,
+                    sensor
+                  )
+                }
+              }
             )
           }
-      }
+      },
 
+      { (data: List<RohDaten>, _, meta) ->
+        val tempByHour: Map<Int, Double> = data
+          .groupBy { it.start.hour }
+          .mapValues { (a, b) -> b.map(RohDaten::temperature).average() }
 
-      val temperatur = {
-        val byHour = convertedCsv.data.groupBy { it.start.hour }
-        val x_axis = "Uhrzeit" to { byHour.keys.toList() }
-        val y_axis = "Temperatur" to { byHour.values.map { it.map { it.temperature }.average() } }
-
-        val graphData = calculateGraphData(
-          x_axis,
-          y_axis
+        val chart = createDefaultChart("asd")
+        chart.addSeries(
+          "Temperatur",
+          tempByHour.keys.toList(),
+          tempByHour.values.toList()
         )
+
+        listOf(PlotAndData(
+          dir = meta.targetDir(),
+          name = "temperatur",
+          plot = chart,
+          csvHeaders = listOf("Uhrzeit", "Temperatur"),
+          csvRows = tempByHour.map { (hour, temp) -> listOf(hour, temp) }
+        ))
+
+      },
+      { (data: List<RohDaten>, _, meta) ->
+
+        val tempByHour =
+          data.groupBy { it.start.hour }
+            .mapValues { (a, b) -> b.map(RohDaten::humidity).average() }
+
+        val chart = createDefaultChart("asd")
+
+        chart.addSeries(
+          "Luftfeuchtigkeit",
+          tempByHour.keys.toList(),
+          tempByHour.values.toList()
+        )
+
         listOf(
           PlotAndData(
-            dir,
-            "temperatur",
-            graphData.createGraph(geomLine(x_axis, y_axis)) + ggsize(
-              500,
-              250
-            ),
-            graphData.keys.toList(),
-            graphData.map { it.value }.rotate()
+            dir = meta.targetDir(),
+            name = "luftfeuchtigkeit",
+            plot = chart,
+            csvHeaders = listOf("Uhrzeit", "Temperatur"),
+            csvRows = tempByHour.map { listOf(it.key, it.value) }
           )
         )
-      }
+      },
+      { (data, _, meta) ->
+        val totalSignals: Map<Int, Int> =
+          data.groupBy { it.start.hour }.mapValues { (_, b) -> b.size }
 
-      val humidity = {
-        val byHour = convertedCsv.data.groupBy { it.start.hour }
-        val x_axis = "Uhrzeit" to { byHour.keys.toList() }
-        val y_axis =
-          "Luftfeuchtigkeit" to { byHour.values.map { it.map { it.humidity }.average() } }
+        val chart = createDefaultChart("asd")
+        chart.addSeries("Signale", totalSignals.keys.toList(), totalSignals.values.toList())
 
-        val graphData = calculateGraphData(
-          x_axis,
-          y_axis
-        )
         listOf(
           PlotAndData(
-            dir,
-            "luftfeuchtigkeit",
-            graphData.createGraph(geomLine(x_axis, y_axis)) + ggsize(
-              500,
-              250
-            ),
-            graphData.keys.toList(),
-            graphData.map { it.value }.rotate()
+            dir = meta.targetDir(),
+            name = "signale_pro_stunde",
+            plot = chart,
+            csvHeaders = listOf("Uhrzeit", "Signal/Stunde"),
+            csvRows = totalSignals.map { listOf(it.key, it.value) }
           )
         )
+
+      },
+      { (data, _, meta) ->
+
+        val signalsByType: Map<FrequencyClassification, Map<Int, Int>> = data
+          .groupBy(RohDaten::frequencyRange)
+          .mapValues { (_, data) -> data.sumOccurenceInEachHour() }
+
+        val chart: XYChart =
+          createDefaultChart("asd")
+
+        signalsByType.forEach { (freq, data) ->
+          chart.plotSeries(freq, data) { FREQUENCY_COLORS.getValue(freq) }
+        }
+
+
+        listOf(
+            PlotAndData(
+              dir = meta.targetDir(),
+              name = "alle",
+              plot = chart,
+              csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Frequenz"),
+              csvRows = signalsByType.flatMap { (freq,data) -> data.map { listOf(it.key, it.value, freq) } }
+            )
+        )
+
       }
-      emit(getrennt)
-      emit(summiert)
-      emit(temperatur)
-      emit(humidity)
-    }
-    .buffer()
-    .flatMapMerge { operations -> withContext(Dispatchers.Default) { operations() }.asFlow() }
-    .collect { withContext(Dispatchers.IO) {
-      async { ggsave(it.plot, filename = "${it.name}.png", path = it.dir) }
-      async { createCsvFile(it.keys, it.data, Paths.get(it.dir, "${it.name}.csv")) }
-    } }
-}
-
-private fun PlotAndData.saveGraphAndData(){
-  ggsave(plot, filename = "$name.png", path = dir)
-  createCsvFile(keys, data, Paths.get(dir, "$name.csv"))
-}
-
-private fun createCsvFile(headers: List<String>, data: List<List<Comparable<*>>>, csvFile: Path) {
-  val csv = createCsvWithHeaders(
-    csvFile,
-    headers
+    )
   )
-  data.forEach { csv.printRecord(it) }
-  csv.close(true)
 }
 
-private fun List<List<Comparable<*>>>.rotate(): List<List<Comparable<*>>> =
-  (0 until (this.firstOrNull()?.size ?: 0)).map { index -> map { it[index] } }
+fun <T : Enum<T>> XYChart.plotSeries(
+  key: Enum<T>,
+  data: Map<Int, Int>,
+  color: (Enum<T>) -> Color
+) {
+  val series = addSeries(key.name, data.keys.toList(), data.values.toList())
+  series.lineColor = color(key)
+}
+
+private fun createDefaultChart(title: String): XYChart {
+  return XYChartBuilder()
+    .width(800)
+    .height(600)
+    .title(title)
+    .xAxisTitle("Uhrzeit")
+    .yAxisTitle("Signal/Stunde")
+    .build()!!
+}
 
 fun List<RohDaten>.sumOccurenceInEachHour(): Map<Int, Int> =
-  this.groupBy { it.start.hour.toInt() }.mapValues { it.value.count() }
+  this.groupBy { it.start.hour }.mapValues { it.value.count() }
 
 
 fun List<RohDaten>.groupBySensorAndSumOccurenceInEachHour(): Map<Sensor, Map<Int, Int>> =
@@ -186,66 +288,3 @@ fun List<RohDaten>.groupBySensorAndSumOccurenceInEachHour(): Map<Sensor, Map<Int
     .groupBy { it.sensor }
     .mapValues { it.value.sumOccurenceInEachHour() }
 
-
-
-typealias Mapping = Pair<String, () -> List<Comparable<*>>>
-
-
-fun calculateGraphData(
-  x_axis: Mapping,
-  y_axis: Mapping,
-  grouping: Mapping? = null,
-  colorMapping: Mapping? = null
-): Map<String, List<Comparable<*>>> = arrayOf(
-  x_axis,
-  y_axis,
-  grouping,
-  colorMapping
-)
-  .filterNotNull()
-  .map { (key, sup) -> key to sup() }
-  .toMap()
-
-private fun geomLine(
-  x_axis: Mapping,
-  y_axis: Mapping,
-  grouping: Mapping? = null,
-  colorMapping: Mapping? = null
-): Feature = geom_line {
-  x = x_axis.first; y = y_axis.first; group = grouping?.first; color = colorMapping?.first
-}
-
-private fun geomLineBlack(
-  x_axis: Mapping,
-  y_axis: Mapping,
-  color: Any
-): Feature = geom_line(color = color) {
-  x = x_axis.first; y = y_axis.first;
-}
-
-
-fun Map<Sensor, Map<Int, Int>>.plot(): Plot {
-
-  val x_axis = "Uhrzeit" to { this.values.flatMap { it.keys } }
-  val y_axis = "Anzahl Signal/Stunde" to { this.values.flatMap { it.values } }
-  val sensorPerGraph =
-    { entries.flatMap { (sensor, data) -> (0 until data.size).map { sensor.name } } }
-  val colorMapping = "Messsonde" to sensorPerGraph
-
-  val graphData = calculateGraphData(
-    x_axis,
-    y_axis,
-    colorMapping
-  )
-
-  return graphData.createGraph(geomLine(x_axis, y_axis, colorMapping = colorMapping))
-}
-
-
-fun Map<String, List<*>>.createGraph(lineMapping: Feature): Plot {
-  var plot = lets_plot(this)
-  plot += lineMapping
-  plot + ggsize(500, 250)
-  return plot
-
-}
