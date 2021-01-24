@@ -95,7 +95,7 @@ fun parseDate(entry: String): LocalDateTime = if (entry.contains("T")) {
 
 suspend fun main() {
   System.setProperty("org.graphstream.ui", "swing");
-  //SYSTEM.renderer.display()
+  SYSTEM.renderer.display()
   produceGraphs(
     sourceCSVFolder = Paths.get(".", "example"),
     outputFolder = Paths.get(".", "graphs"),
