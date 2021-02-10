@@ -94,8 +94,8 @@ fun parseDate(entry: String): LocalDateTime = if (entry.contains("T")) {
 
 
 suspend fun main() {
-  System.setProperty("org.graphstream.ui", "swing");
-  SYSTEM.renderer.display()
+//  System.setProperty("org.graphstream.ui", "swing");
+//  SYSTEM.renderer.display()
   produceGraphs(
     sourceCSVFolder = Paths.get(".", "example"),
     outputFolder = Paths.get(".", "graphs"),
@@ -118,7 +118,7 @@ suspend fun main() {
       }
     },
     //Remove all entries for Sensor ADC5 because science.
-    filter = { true },
+    filter = { rohDatenSatz -> rohDatenSatz.start.hour > 7 && rohDatenSatz.start.hour < 24 },
     //Define a list of functions producing n graphs. All CSV files from the source folder are applied to these functions
     graphCreationFunctions = listOf(
       { (data: List<RohDaten>, _, meta) ->
@@ -127,6 +127,8 @@ suspend fun main() {
           .mapValues { (_, rawData) -> rawData.sumOccurenceInEachHour() }
           .map { (frequency, data: Map<Int, Int>) ->
             val chart = createDefaultChart("asd")
+            //Hier wird der style gesetzt.
+            chart.marieBautTolleGrafenMitFarbenUndSo()
             chart.plotSeries(frequency, data) { FREQUENCY_COLORS.getValue(frequency) }
 
             PlotAndData(
@@ -277,6 +279,14 @@ private fun createDefaultChart(title: String): XYChart {
     .xAxisTitle("Uhrzeit")
     .yAxisTitle("Signal/Stunde")
     .build()!!
+}
+
+private fun XYChart.marieBautTolleGrafenMitFarbenUndSo(){
+  val chart: XYChart = this
+  val styler = chart.styler;
+
+  chart.getStyler().setPlotBackgroundColor(Color.WHITE)
+
 }
 
 fun List<RohDaten>.sumOccurenceInEachHour(): Map<Int, Int> =
