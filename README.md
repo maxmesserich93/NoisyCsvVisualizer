@@ -68,7 +68,7 @@ enum class Sensor {
       }
 ```
 ## Graph output
-![](https://github.com/maxmesserich93/NoisyCsvVisualizer/blob/master/SCHWIRREN-getrennt.png | width=300)
+![Graph](https://github.com/maxmesserich93/NoisyCsvVisualizer/blob/master/SCHWIRREN-getrennt.png){:width="600px"}
 ## CSV output (sample)
 
 |Uhrzeit                 |Signal/Stunde|Messsonde|
