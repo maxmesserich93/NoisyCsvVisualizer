@@ -54,43 +54,49 @@ enum class Sensor {
             data.forEach { (sensor, data) ->
               data.forEachIndexed{index, range ->
                 chart.plotSeries(sensor, range, {SENSOR_COLORS.getValue(sensor)}, index)
+
               }
             }
-
-            val map = data.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
 
             PlotAndData(
               dir = meta.targetDir(),
               name = "$frequencyClassification-getrennt",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Messsonde"),
-              csvRows = map
+              csvRows = data.flatMap { (sensor, d) ->  d.flatMap { it.entries.map { listOf(it.key, it.value, sensor.name) } }}
             )
           }
       }
 ```
 ## Graph output
 ![Graph](https://github.com/maxmesserich93/NoisyCsvVisualizer/blob/master/SCHWIRREN-getrennt.png)
+
 ## CSV output (sample)
 
 |Uhrzeit                 |Signal/Stunde|Messsonde|
 |------------------------|-------------|---------|
-|8                       |14           |         |
-|9                       |15           |         |
-|10                      |9            |         |
-|11                      |15           |         |
-|12                      |7            |         |
-|13                      |5            |         |
-|14                      |8            |         |
-|15                      |40           |         |
-|16                      |31           |         |
-|17                      |21           |         |
-|18                      |44           |         |
-|19                      |50           |         |
-|20                      |98           |         |
-|21                      |47           |         |
-|22                      |9            |         |
-|8                       |8            |         |
+|8                       |14           |ADC1     |
+|9                       |15           |ADC1     |
+|10                      |9            |ADC1     |
+|11                      |15           |ADC1     |
+|12                      |7            |ADC1     |
+|13                      |5            |ADC1     |
+|14                      |8            |ADC1     |
+|15                      |40           |ADC1     |
+|16                      |31           |ADC1     |
+|17                      |21           |ADC1     |
+|18                      |44           |ADC1     |
+|19                      |50           |ADC1     |
+|20                      |98           |ADC1     |
+|21                      |47           |ADC1     |
+|22                      |9            |ADC1     |
+|8                       |8            |ADC3     |
+|9                       |10           |ADC3     |
+|10                      |2            |ADC3     |
+|16                      |1            |ADC3     |
+|17                      |15           |ADC3     |
+|18                      |37           |ADC3     |
+
 
 
 
