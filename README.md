@@ -52,9 +52,8 @@ enum class Sensor {
             val chart = createDefaultChart("asd")
 
             data.forEach { (sensor, data) ->
-              data.forEachIndexed{index, range ->
-                chart.plotSeries(sensor, range, {SENSOR_COLORS.getValue(sensor)}, index)
-
+              data.forEachIndexed{index, frame ->
+                chart.plotSeries(sensor, frame, {SENSOR_COLORS.getValue(sensor)}, index)
               }
             }
 
