@@ -2,7 +2,7 @@
 
 This is a readme is not final and will *definitly* be improved in the future.
 
-A kotlin application based using a questionalbe homebrew actor system based on kotlin channels, [Arrow](https://github.com/arrow-kt/arrow) for parsing data and [XChart](https://github.com/knowm/XChart) for data visualization.
+A kotlin application using a questionalbe homebrew actor system based on kotlin channels, [Arrow](https://github.com/arrow-kt/arrow) for parsing data and [XChart](https://github.com/knowm/XChart) for data visualization.
 
 
 
