@@ -268,7 +268,7 @@ fun <T : Enum<T>> XYChart.plotSeries(
   color: (Enum<T>) -> Color,
   rangeId: Int? = null
 ) {
-  val series = addSeries(rangeId?.let { "${key.name}_$rangeId}" } ?: key.name,
+  val series = addSeries(rangeId?.let { "${key.name}_$rangeId" } ?: key.name,
     data.keys.toList(), data.values.toList())
   series.lineColor = color(key)
 }
