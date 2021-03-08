@@ -97,8 +97,8 @@ suspend fun main() {
 //  System.setProperty("org.graphstream.ui", "swing");
 //  SYSTEM.renderer.display()
   produceGraphs(
-    sourceCSVFolder = Paths.get(".", "example"),
-    outputFolder = Paths.get(".", "graphs"),
+    sourceCSVFolder = Paths.get( "example"),
+    outputFolder = Paths.get( "graphs"),
     csvSeparator = ',',
     //Convert csv row to your data type
     dataParser = { row ->
@@ -117,26 +117,31 @@ suspend fun main() {
         )
       }
     },
-    //Remove all entries for Sensor ADC5 because science.
-    filter = { rohDatenSatz -> rohDatenSatz.start.hour > 7 && rohDatenSatz.start.hour < 24 },
+    //Remove irrelevant hours
+    filter = { rohDatenSatz -> rohDatenSatz.start.hour in 8..23 },
     //Define a list of functions producing n graphs. All CSV files from the source folder are applied to these functions
     graphCreationFunctions = listOf(
       { (data: List<RohDaten>, _, meta) ->
         data
           .groupBy { it.frequencyRange }
-          .mapValues { (_, rawData) -> rawData.sumOccurenceInEachHour() }
-          .map { (frequency, data: Map<Int, Int>) ->
+          .mapValues { (_, rawData) -> rawData.sumOccurenceInEachHourSeperateIntoFrames() }
+          .map { (frequency, data: List<Map<Int, Int>>) ->
             val chart = createDefaultChart("asd")
             //Hier wird der style gesetzt.
             chart.marieBautTolleGrafenMitFarbenUndSo()
-            chart.plotSeries(frequency, data) { FREQUENCY_COLORS.getValue(frequency) }
+            data.forEachIndexed { index, range ->
+              chart.plotSeries(frequency, range, {FREQUENCY_COLORS.getValue(frequency)}, index)
+            }
+
+
 
             PlotAndData(
               dir = meta.targetDir(),
               name = "${frequency}-summiert",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde"),
-              csvRows = data.map { (hour, occurence) -> listOf(hour, occurence) }
+              csvRows = data.flatMap { range -> range.entries.map { it.toPair().toList() } }
+
             )
           }
       },
@@ -144,28 +149,27 @@ suspend fun main() {
       { (data: List<RohDaten>, _, meta) ->
         data
           .groupBy { it.frequencyRange }
-          .mapValues { (_, rawData) -> rawData.groupBySensorAndSumOccurenceInEachHour() }
+          .mapValues { (_, rawData) -> rawData.groupBySensorAndSumOccurenceInEachHourSeperateIntoFrames() }
           .map { (frequencyClassification, data) ->
             val chart = createDefaultChart("asd")
 
             data.forEach { (sensor, data) ->
-              chart.plotSeries(sensor, data) { SENSOR_COLORS.getValue(sensor) }
+              data.forEachIndexed{index, range ->
+                chart.plotSeries(sensor, range, {SENSOR_COLORS.getValue(sensor)}, index)
+
+              }
             }
+
+            val map = data.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
+
+
 
             PlotAndData(
               dir = meta.targetDir(),
               name = "$frequencyClassification-getrennt",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Messsonde"),
-              csvRows = data.flatMap { (sensor, data) ->
-                data.map {
-                  listOf(
-                    it.key,
-                    it.value,
-                    sensor
-                  )
-                }
-              }
+              csvRows = map
             )
           }
       },
@@ -235,17 +239,19 @@ suspend fun main() {
       },
       { (data, _, meta) ->
 
-        val signalsByType: Map<FrequencyClassification, Map<Int, Int>> = data
+        val signalsByType: Map<FrequencyClassification, List<Map<Int, Int>>> = data
           .groupBy(RohDaten::frequencyRange)
-          .mapValues { (_, data) -> data.sumOccurenceInEachHour() }
+          .mapValues { (_, data) -> data.sumOccurenceInEachHourSeperateIntoFrames() }
 
         val chart: XYChart =
           createDefaultChart("asd")
 
         signalsByType.forEach { (freq, data) ->
-          chart.plotSeries(freq, data) { FREQUENCY_COLORS.getValue(freq) }
-        }
+          data.forEachIndexed { index, range ->
+            chart.plotSeries(freq, range, { FREQUENCY_COLORS.getValue(freq) }, index)
+          }
 
+        }
 
         listOf(
             PlotAndData(
@@ -253,7 +259,7 @@ suspend fun main() {
               name = "alle",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Frequenz"),
-              csvRows = signalsByType.flatMap { (freq,data) -> data.map { listOf(it.key, it.value, freq) } }
+              csvRows = signalsByType.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
             )
         )
 
@@ -265,9 +271,11 @@ suspend fun main() {
 fun <T : Enum<T>> XYChart.plotSeries(
   key: Enum<T>,
   data: Map<Int, Int>,
-  color: (Enum<T>) -> Color
+  color: (Enum<T>) -> Color,
+  rangeId: Int? = null
 ) {
-  val series = addSeries(key.name, data.keys.toList(), data.values.toList())
+  val series = addSeries(rangeId?.let { "${key.name}_$rangeId}" } ?: key.name,
+    data.keys.toList(), data.values.toList())
   series.lineColor = color(key)
 }
 
@@ -289,12 +297,52 @@ private fun XYChart.marieBautTolleGrafenMitFarbenUndSo(){
 
 }
 
-fun List<RohDaten>.sumOccurenceInEachHour(): Map<Int, Int> =
-  this.groupBy { it.start.hour }.mapValues { it.value.count() }
+fun List<RohDaten>.sumOccurenceInEachHourSeperateIntoFrames(): List<Map<Int, Int>> {
+  val byHour = this.groupBy { it.start.hour }.mapValues { it.value.count() }
+  val frames = findConsecutiveIntFrames(byHour.keys)
 
+  return frames.map { it.map { hour -> hour to byHour[hour]!! }.toMap() }
+}
 
-fun List<RohDaten>.groupBySensorAndSumOccurenceInEachHour(): Map<Sensor, Map<Int, Int>> =
+fun List<RohDaten>.groupBySensorAndSumOccurenceInEachHourSeperateIntoFrames(): Map<Sensor, List<Map<Int, Int>>> =
   this
     .groupBy { it.sensor }
-    .mapValues { it.value.sumOccurenceInEachHour() }
+    .mapValues { it.value.sumOccurenceInEachHourSeperateIntoFrames() }
 
+
+interface OP {
+  val accumeator: List<List<Int>>
+  val current: List<Int>
+}
+interface WithValue { val lastValue: Int }
+sealed class State(override val accumeator: List<List<Int>> ) : OP
+data class Empty(override val accumeator:List<List<Int>>, override val current: List<Int>) : State(accumeator)
+data class NonEmpty(
+  override val accumeator:List<List<Int>>,
+  override val current: List<Int>,
+  override val lastValue: Int
+) : State(accumeator), WithValue
+fun findConsecutiveIntFrames(ints: Set<Int>): List<List<Int>> {
+  val op =  ints.sorted().fold(
+    Empty(mutableListOf(), emptyList()) as State,
+    operation = {  acc, value ->
+      when (acc) {
+        is Empty -> NonEmpty(acc.accumeator, listOf(value), value)
+        is NonEmpty -> {
+          value - acc.lastValue
+          when (value - acc.lastValue) {
+            1 -> NonEmpty(accumeator= acc.accumeator, current = acc.current + value, lastValue = value)
+            else -> NonEmpty(
+              accumeator = (acc.accumeator + listOf(acc.current)),
+              listOf(value),
+              value)
+          }
+        }
+      }
+    }
+  )
+  return when {
+    op.current.isNotEmpty() -> (op.accumeator + listOf(op.current))
+    else -> op.accumeator
+  }
+}
