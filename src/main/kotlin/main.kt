@@ -136,8 +136,7 @@ suspend fun main() {
               name = "${frequency}-summiert",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde"),
-              csvRows = data.flatMap { range -> range.entries.map { it.toPair().toList() } }
-
+              csvRows = data.flatMap { range -> range.entries.map { listOf(it.key,it.value,frequency.name) } }
             )
           }
       },
@@ -150,20 +149,18 @@ suspend fun main() {
             val chart = createDefaultChart("asd")
 
             data.forEach { (sensor, data) ->
-              data.forEachIndexed{index, range ->
-                chart.plotSeries(sensor, range, {SENSOR_COLORS.getValue(sensor)}, index)
+              data.forEachIndexed{index, frame ->
+                chart.plotSeries(sensor, frame, {SENSOR_COLORS.getValue(sensor)}, index)
 
               }
             }
-
-            val map = data.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
 
             PlotAndData(
               dir = meta.targetDir(),
               name = "$frequencyClassification-getrennt",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Messsonde"),
-              csvRows = map
+              csvRows = data.flatMap { (sensor, d) ->  d.flatMap { it.entries.map { listOf(it.key, it.value, sensor.name) } }}
             )
           }
       },
@@ -253,7 +250,7 @@ suspend fun main() {
               name = "alle",
               plot = chart,
               csvHeaders = listOf("Uhrzeit", "Signal/Stunde", "Frequenz"),
-              csvRows = signalsByType.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
+              csvRows = signalsByType.flatMap { (freq, data) ->  data.flatMap { it.entries.map { listOf(it.key, it.value, freq.name) } }}
             )
         )
 
