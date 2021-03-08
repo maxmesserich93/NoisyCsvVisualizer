@@ -1,8 +1,9 @@
 # NoisyCsvVisualizer
 
 This is a readme is not final and will *definitly* be improved in the future.
+A kotlin application for visualizing poor qualitity csv data into useable plots. 
 
-A kotlin application using a questionalbe homebrew actor system based on kotlin channels, [Arrow](https://github.com/arrow-kt/arrow) for parsing data and [XChart](https://github.com/knowm/XChart) for data visualization.
+Based on a questionalbe homebrew actor system based on kotlin channels, [Apache Commons CSV](https://commons.apache.org/proper/commons-csv/) for CSV parsing, [Arrow](https://github.com/arrow-kt/arrow) for data transformation and [XChart](https://github.com/knowm/XChart) for data visualization.
 
 
 
