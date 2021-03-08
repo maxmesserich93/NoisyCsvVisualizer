@@ -1,6 +1,6 @@
 # NoisyCsvVisualizer
 
-This is a readme is not final and will *definitly* be improved in the future.
+This is readme is not final and will *definitly* be improved in the future.
 
 A kotlin application for visualizing poor qualitity csv data into useable plots. 
 
