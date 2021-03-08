@@ -1,5 +1,6 @@
 import MessageSource.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.flow.collect
@@ -7,35 +8,18 @@ import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import org.graphstream.graph.Graph
-import org.graphstream.graph.implementations.Graphs.synchronizedGraph
-import org.graphstream.graph.implementations.SingleGraph
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 
 //Very stupid way to keep track of some stuff
 data class ActorSystem(
-  val renderer: Graph,
   val idCount: AtomicInteger,
 ) {
   fun getId() = idCount.incrementAndGet()
-
-
-  fun addChild(parent: Int, child: Int){
-    val childNode = renderer.addNode(child.toString())
-    val parentNode = renderer.addNode(parent.toString())
-    renderer.addEdge("$parent-$child", parentNode, childNode)
-  }
-
-  fun removeChild(id: Int) {
-    renderer.removeNode(id.toString())
-  }
-
 }
 
 val SYSTEM = ActorSystem(
-   synchronizedGraph(SingleGraph("ACTOR", false, true)),
   AtomicInteger(0))
 
 enum class ActorState {
@@ -82,6 +66,7 @@ data class ActorData<T>(
    * @param payload
    * @param message
    */
+  @FlowPreview
   suspend fun listener(
     payload: suspend (Payload<T>, ActorData<T>) -> Unit,
     message: suspend (ActorMessage<*>) -> Unit
@@ -94,13 +79,11 @@ data class ActorData<T>(
             is Payload<*> -> payload(message as Payload<T>, this@ActorData)
           }
         }
-
     }
   }
 
 
   fun <A : Any> addChild(child: ActorRef<A>) {
-    SYSTEM.addChild(id, child.id)
     children[child.id] = child
   }
 
@@ -118,7 +101,6 @@ data class ActorData<T>(
   suspend fun finished() {
     state = ActorState.FINISHED
     if (parent != null) parent!!.sendMessage(Finished<Any>(ref()))
-    SYSTEM.removeChild(id)
     this.close()
   }
 

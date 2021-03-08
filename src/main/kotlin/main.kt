@@ -94,8 +94,6 @@ fun parseDate(entry: String): LocalDateTime = if (entry.contains("T")) {
 
 
 suspend fun main() {
-//  System.setProperty("org.graphstream.ui", "swing");
-//  SYSTEM.renderer.display()
   produceGraphs(
     sourceCSVFolder = Paths.get( "example"),
     outputFolder = Paths.get( "graphs"),
@@ -133,8 +131,6 @@ suspend fun main() {
               chart.plotSeries(frequency, range, {FREQUENCY_COLORS.getValue(frequency)}, index)
             }
 
-
-
             PlotAndData(
               dir = meta.targetDir(),
               name = "${frequency}-summiert",
@@ -150,7 +146,7 @@ suspend fun main() {
         data
           .groupBy { it.frequencyRange }
           .mapValues { (_, rawData) -> rawData.groupBySensorAndSumOccurenceInEachHourSeperateIntoFrames() }
-          .map { (frequencyClassification, data) ->
+          .map { (frequencyClassification, data: Map<Sensor, List<Map<Int, Int>>>) ->
             val chart = createDefaultChart("asd")
 
             data.forEach { (sensor, data) ->
@@ -161,8 +157,6 @@ suspend fun main() {
             }
 
             val map = data.flatMap { it.value }.flatMap { it.entries.map { it.toPair().toList() } }
-
-
 
             PlotAndData(
               dir = meta.targetDir(),
