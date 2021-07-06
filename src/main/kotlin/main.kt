@@ -402,7 +402,8 @@ private fun createDefaultChart(title: String, xAxisTitle: String, yAxisTitle: St
 }
 
 private fun XYChart.withWhiteBackground(): XYChart = this.apply {
-    getStyler().setPlotBackgroundColor(Color.WHITE)
+    styler.plotBackgroundColor = Color.WHITE
+    styler.plotGridLinesColor = Color.WHITE
 }
 
 fun List<RohDaten>.sumOccurenceInEachHourSeperateIntoFrames(): List<Map<Int, Int>> {
