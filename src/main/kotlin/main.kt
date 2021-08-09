@@ -10,6 +10,7 @@ import Sensor.ADC3
 import Sensor.ADC4
 import Sensor.ADC5
 import arrow.core.computations.either
+import arrow.core.k
 import org.knowm.xchart.XYChart
 import org.knowm.xchart.XYChartBuilder
 import java.awt.Color
@@ -372,6 +373,66 @@ suspend fun main() {
                         plot = chart,
                         csvHeaders = listOf("Time", "temperature_inside", "temperature_outside"),
                         csvRows = temperatureInside.map { listOf(it.key, it.value, temperatureOutside[it.key]!!) }
+                    )
+                )
+            },
+            { (data: List<RohDaten>, _, meta) ->
+                val humidityInside =
+                    data.groupBy { it.start.hour }
+                        .mapValues { (a, b) -> b.map(RohDaten::humidity).average() }
+
+                val humidityOutside =
+                    data.groupBy { it.start.hour }
+                        .mapValues { (a, b) -> b.map(RohDaten::outsideHumidity).average() }
+
+
+                val chart = createDefaultChart(
+                    "Humidity inside and outside",
+                    "Uhrzeit",
+                    "Signal/Stunde"
+                )
+
+                chart.addSeries(
+                    "humidity inside",
+                    humidityInside.keys.toList(),
+                    humidityInside.values.toList()
+                )
+
+                chart.addSeries(
+                    "humidity outside",
+                    humidityOutside.keys.toList(),
+                    humidityOutside.values.toList()
+                )
+
+                val temperatureInside =
+                    data.groupBy { it.start.hour }
+                        .mapValues { (a, b) -> b.map(RohDaten::temperature).average() }
+
+                val temperatureOutside =
+                    data.groupBy { it.start.hour }
+                        .mapValues { (a, b) -> b.map(RohDaten::outsideTemperature).average() }
+
+
+                chart.addSeries(
+                    "temperature inside",
+                    temperatureInside.keys.toList(),
+                    temperatureInside.values.toList()
+                )
+
+                chart.addSeries(
+                    "temperature outside",
+                    temperatureOutside.keys.toList(),
+                    temperatureOutside.values.toList()
+                )
+
+
+                listOf(
+                    PlotAndData(
+                        dir = meta.targetDir(),
+                        name = "temperature_humidity_inside_outside",
+                        plot = chart,
+                        csvHeaders = listOf("Time", "humidity_inside", "humidity_outside","temperature_inside", "temperature_outside"),
+                        csvRows =  humidityInside.map { listOf(it.key, it.value, humidityOutside[it.key]!!,temperatureInside[it.key]!!, temperatureOutside[it.key]!!) }
                     )
                 )
             }
